@@ -1,0 +1,2261 @@
+---
+title: "Coding of Project Data"
+author: "Lennard E.-A. Heuer"
+date: "2022-17-04"
+output:
+  word_document: default
+  pdf_document: default
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), 
+                      tidy = "TRUE", echo = T)
+```
+
+
+# -0- General Information
+
+
+- CC represents "Code Chunk"
+- The plots that are shown in this knitted RMarkdown document should only indicate to which plot certain parts of coding actually belong. The plots are not formatted according for the best visual performance in RMarkdown, but they were optimized for exporting them to a png-file stored on the computer. 
+
+
+# -1- Loading Data and Packages (data colleciton)
+
+
+**CC01** Loading the packages (not part of the compiling, but packages have to be installed prior to running the RMarkdown script)
+```{r, eval=FALSE}
+install.packages("readxl")
+install.packages("writexl")
+install.packages("tidyverse")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("ggforce")
+install.packages("plotly")
+install.packages("stringr")
+install.packages("gghighlight")
+install.packages("plots")
+install.packages("wordcloud")
+install.packages("RColorBrewer")
+install.packages("wordcloud2")
+install.packages("tm")
+install.packages("treemapify")
+install.packages("reticulate")
+```
+
+**CC02** Loading several standart libraries
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+```
+
+**CC03** Loading of all data relevant for the thesis
+```{r, echo=FALSE, results='hide', warning=FALSE}
+# Data.csv must be downloaded from the FAO's website fist using the foloowing 
+# link: https://www.fao.org/platform-food-loss-waste/flw-data/en/
+# Make sure to set the right working directory in RStudio to access to the file 
+# by reading it in.
+PD <- read.csv("Data.csv")
+
+# This is the total number of data points in the FLI dataset worked with:
+nrow(PD)
+
+PD$index = (1:length(PD$m49_code))
+
+# Below, the SSA countries, according to the World Bank's definition of 
+# SSA-countries. See Git Hub repository for the complete listing of all SSA 
+# countries. Since there was no list of only the SSA countries and their m49 
+# codes available, the list was manually created.
+SSA_m49_codes_plain <- read_excel("Project data.xlsx", 
+  sheet = "SSASelection")
+
+# The data of Logistics Performance Indicator (Aggregated  rankings) was 
+# downloaded from: https://lpi.worldbank.org/international/aggregated-ranking
+# This data will be used at a later stage.
+LPI_Agg_12_18 <- read_excel("lpi_aggregated_ranks.xlsx")
+
+# For reasons later explained, the m49-codes of all SSA countries are loaded 
+# from https://data.apps.fao.org/catalog/dataset/m49-code-list-global
+m49 <- read.csv("m49.csv")
+```
+
+
+# -2- Data Processing
+
+
+**CC04** Merging the data
+```{r}
+# For merging the data, the column names across the data frames 
+# "SSA_m49_codes_plain" and "m49"
+colnames(SSA_m49_codes_plain) <- c("m49_code")
+m49 <- m49[,1:2]
+colnames(m49) <- c("m49_code", "Country")
+
+# First merge between the project data (PD) and the m49-codes of the countries
+# The scope of the research
+PD <- merge(PD, SSA_m49_codes_plain, "m49_code")
+
+# Second merge between PD and the data of the Logistics Performance 
+# Indicator, aggregated over the years 2012-2018
+# This is problematical, since the naming of SSA countries varies 
+# by source. Thus, a harmonization of names has to be achieved first.
+
+# Then, compare the names of the SSA countries in the name-code key data frame 
+# and the names of the African countries in the LPI data frame.
+
+Key_SSA_Countries_m49_code <- merge(m49, SSA_m49_codes_plain, "m49_code")
+
+Key_No_SSA_Countries_m49_code <- 
+  subset(m49, !m49$m49_code %in% SSA_m49_codes_plain$m49_code)
+
+# First sorting out of countries not are not of those countries that are 
+# definetily out of the scope. Hence, the might be in the geographical scope or 
+# there is a problem of missing data or naming of countries
+LPI_Agg_12_18_FS <- subset(LPI_Agg_12_18, !LPI_Agg_12_18$Country %in% Key_No_SSA_Countries_m49_code$Country)
+
+# These countries definitely fall inside the scope
+LPI_Agg_12_18_DI <- subset(LPI_Agg_12_18, LPI_Agg_12_18$Country %in% Key_SSA_Countries_m49_code$Country)
+
+# As for these countries it is uncertain whether they fall into the scope or 
+# not. They must be further investigated on.
+To_be_cleared <- subset(LPI_Agg_12_18_FS, !LPI_Agg_12_18_FS$Country %in% LPI_Agg_12_18_DI$Country)
+
+# These countries are missing in the LPI
+Missing_SSA_Countries_in_LPI = subset(Key_SSA_Countries_m49_code, !Key_SSA_Countries_m49_code$Country %in% LPI_Agg_12_18_DI$Country)
+
+To_be_cleared <- To_be_cleared[order(To_be_cleared$Country),]
+Missing_SSA_Countries_in_LPI <- Missing_SSA_Countries_in_LPI[order(Missing_SSA_Countries_in_LPI$Country),]
+
+# As for the countries in the Missing_SSA_Countries_in_LPI-table, it is certian 
+# that they are SSA countreis but they don't apppear to be in the FLI when 
+# comparing them to the SSA-key-list. Howeve, since they are SSA countries one 
+# would expect them to be in the FLI data base.
+# As for the table To_be_cleared, it is just known that they are not definitely 
+# inside the scope of this thesis. Therefore, they could be inside or outside 
+# the scope of this thesis.
+# What now follows is a comparison of the two tables.
+To_be_cleared
+Missing_SSA_Countries_in_LPI
+```
+
+Comparison of the two tables:
+
+Cabo Verde – Not part of LPI
+Central African Republic – “C.A.R.” (rename)
+Congo – “Congo, Rep.” (rename)
+Côte d'Ivoire – “Cote d'Ivoire” (rename)
+Democratic Republic of the Congo – “Congo, Dem. Rep.“ (rename)
+Eswatini - Not part of LPI
+Gambia – “Gambia, The“ (rename)
+Sao Tome and Principe	- “São Tomé and Príncipe” (rename)
+Seychelles - Not part of LPI
+South Sudan - Not part of LPI
+United Republic of Tanzania - "Tanzania" (rename)
+
+**CC05** Rename of country names in the LPI
+```{r}
+LPI_Agg_12_18$Country <- gsub("C.A.R.", "Central African Republic", 
+                              LPI_Agg_12_18$Country)
+LPI_Agg_12_18$Country <- gsub("Cote d'Ivoire", "Côte d'Ivoire", 
+                              LPI_Agg_12_18$Country)
+LPI_Agg_12_18$Country <- gsub("Congo, Dem. Rep."
+                  , "Democratic Republic of the Congo", LPI_Agg_12_18$Country)
+LPI_Agg_12_18$Country <- gsub("Gambia, The", "Gambia", LPI_Agg_12_18$Country)
+LPI_Agg_12_18$Country <- gsub("São Tomé and Príncipe", 
+                              "Sao Tome and Principe", LPI_Agg_12_18$Country)
+LPI_Agg_12_18$Country <- gsub("Tanzania", "United Republic of Tanzania", LPI_Agg_12_18$Country)
+```
+Remark: It is obvious that LPI data from certain countries is missing.
+This issue will be touched upon later.
+
+**CC06** Limiting the project data to the geographical scope of the thesis
+```{r}
+# Create subset of LPI data in which all entries are definitely inside the scope of the thesis.
+LPI_Agg_12_18_DI <- subset(LPI_Agg_12_18, LPI_Agg_12_18$Country %in% Key_SSA_Countries_m49_code$Country)
+
+# Joining the LPI and m49-data
+hand_over_to_PD <- full_join(Key_SSA_Countries_m49_code, 
+                             LPI_Agg_12_18_DI, by = "Country")
+# Countries not inside the FLI
+subset(hand_over_to_PD, is.na(`LPI Score`))
+
+# The countries above are not part of the FLI
+PD <- full_join(PD, hand_over_to_PD, by = "m49_code")
+```
+
+**CC07** Dropping and renaming columns
+```{r}
+# The ranking data of the indicator categories can be dropped
+PD <- PD[, -which(names(PD) %in% c("Customs...4", "Infrastructure...6", 
+                                   "International shipments...8", "Logistics competence...10", "Tracking & tracing...12", "Timeliness...14"))]
+
+# It is tedious to deal with spaced column names in R.
+# Therefore, spaces are replaced by underlines here.
+# In order no to confuse the program "&" is replaced by 
+# an "and"
+names(PD) <- str_replace_all(names(PD), c(" " = "_"))
+names(PD) <- str_replace_all(names(PD), c("&" = "and"))
+
+# Renaming of certain columns
+PD <- PD  %>% rename(
+    LPI_rank = LPI_Rank, 
+    LPI_score = LPI_Score,
+    customs = Customs...5,
+    infrastructure = Infrastructure...7,
+    international_shipments = International_shipments...9,
+    logistics_competence = Logistics_competence...11,
+    tracking_tracing = Tracking_and_tracing...13,
+    timeliness = Timeliness...15
+)
+```
+
+
+
+-2- Constructing the data
+
+
+**CC08** First categorization of food into food categories
+```{r}
+PD <- PD %>%
+  add_column(food_category = NA)
+
+#For the sake of filtering
+PD$cpc_code <- as.character(PD$cpc_code)
+PD$food_category <- as.character(PD$food_category)
+
+# Categories easy to code
+for (i in 1:length(PD$cpc_code)) {
+  if (grepl("^011", PD$cpc_code[i])) { 
+    PD$food_category[i] =  "Cereals"
+  } else if (grepl("^015", PD$cpc_code[i])) {
+                PD$food_category[i] =  "R&T"
+  } else if (grepl("^014", PD$cpc_code[i]) | 
+             (grepl("^017", PD$cpc_code[i]))){   
+                PD$food_category[i] = "O&P"
+  } else if (grepl("^013", PD$cpc_code[i]) &
+             !(grepl("^0137", PD$cpc_code[i]))) {
+                PD$food_category[i] = "Fruits"
+  } else if (grepl("^012", PD$cpc_code[i])) {
+                PD$food_category[i] =  "Veget."
+  } else if (grepl("^211", PD$cpc_code[i])) {
+                PD$food_category[i] =  "Meat"
+  } else if (grepl("^04", PD$cpc_code[i])) {
+                PD$food_category[i] =  "Fish"
+  } else if (grepl("^22", PD$cpc_code[i]) &
+            (!grepl("^223", PD$cpc_code[i]))) {
+                PD$food_category[i] =  "Dairy"
+  } else if (grepl("^223", PD$cpc_code[i])) {
+                PD$food_category[i] =  "Eggs"
+  } else {
+                PD$food_category[i] =  "Others/NA"
+  }
+}
+
+unique(PD$food_category)
+
+# Observations that are not assigned to a food category yet
+count(PD, food_category == "Others/NA")
+obs_without_f_catgory = filter(PD, food_category == "Others/NA")
+print(sort(unique(obs_without_f_catgory$cpc_code)))
+```
+
+There are 10 cpc_codes that weren't assigned to a food category yet.
+https://unstats.un.org/unsd/classifications/Econ/Structure
+
+I (Cacao beans):
+01640 - Cocoa beans
+
+II (Capsicum):
+01651 - Pepper (Piper spp.), raw
+01652 - Chillies and peppers, dry (Capsicum spp., Pimenta spp.), raw
+
+III (Live animals):
+02111 - Cattle (live animals)
+
+IV (Milk):
+02211 - Raw milk of cattle
+
+V (Hen Eggs):
+0231 - Hen eggs in shell, fresh
+
+VI (Nuts):
+21421 - Groundnuts, shelled
+
+VII (Grain mill products):
+23110 - Wheat and meslin flour
+23120.09 - Other cereal flours
+23161.02 - Rice, semi- or wholly milled
+23170.01 - Other vegetable flours and meals
+
+**CC09** Assign remaining food categories
+```{r}
+for (i in 1:length(PD$cpc_code)) {
+         if (grepl("^01640", PD$cpc_code[i]) | 
+            (grepl("^21421", PD$cpc_code[i]))){ 
+                PD$food_category[i] =  "N&C"
+  } else if ((grepl("^01651", PD$cpc_code[i])) | 
+             (grepl("^01652", PD$cpc_code[i]))){   
+                PD$food_category[i] = "Veget."
+  } else if (grepl("^02211", PD$cpc_code[i])) {
+                PD$food_category[i] = "Dairy"
+  } else if (grepl("^0231", PD$cpc_code[i])) {
+                PD$food_category[i] = "Eggs"
+  } else if ((grepl("^23110", PD$cpc_code[i])) |
+            (grepl("^23120", PD$cpc_code[i])) |
+            (grepl("^23161", PD$cpc_code[i])) |
+            (grepl("^23170", PD$cpc_code[i]))){
+                PD$food_category[i] = "Cereals" 
+  }
+}
+Cattle = filter(PD, cpc_code == "02111")
+count(Cattle)
+print(Cattle)
+# There is only one cattle observation. Since the respective food_supply_stage 
+# was named "post-harvest", it can be assumed that meat of cattle is actually 
+# meant. Therefore, the data point will be assigned to the food category meat.
+for (i in 1:length(PD$cpc_code)) {
+         if (grepl("^02111", PD$cpc_code[i])) { 
+                PD$food_category[i] =  "Meat"
+    }
+}
+```
+
+**CC10** Checking the food categories again for unassigned data points
+```{r}
+subset(PD, food_category == "Others/NA")
+PD = subset(PD, food_category != "Others/NA")
+```
+
+**CC11** Creating a back-up-version of the dataset after first processing of the dataset
+```{r}
+PD_orig. <- PD
+PD <- PD_orig.
+```
+There is no more data that is not assigned to a food category yet.
+
+**CC12** Retrieve list of all SC stages and take a look at activities on the SC stage "farm"
+```{r}
+# These are all SC stages within the dataset
+unique(PD$food_supply_stage)
+
+# These are all activities that occur among data point belonging to the 
+# SC stage "farm".
+unique((filter(PD, PD$food_supply_stage == "Farm"))$activity)
+
+# Comparison of the activities on the farm SC stages with the activities on the 
+# processing SC stage
+unique((filter(PD, PD$food_supply_stage == "Processing"))$activity)
+```
+There are many equal and similar entries of data points belonging to the farm SC stage and data points belonging to the processing SC stage.
+
+**CC13** Breaking up the SC stage of farm I
+```{r}
+PD$food_supply_stage <- as.character(PD$food_supply_stage)
+
+PD$method_data_collection <- as.factor(PD$method_data_collection)
+summary(PD$method_data_collection)
+ 
+# Using the feature activity as an indicator, which SC stage to transfer the 
+# data points to.
+
+for (i in 1:length(PD$cpc_code)) {
+  if(PD$food_supply_stage[i] == "Farm" & 
+    (PD$activity[i] == "Harvest" | PD$activity[i] == "Harvesting, Storage" | 
+     PD$activity[i] == "Harvesting")) {
+      PD$food_supply_stage[i] = "Harvest"
+  }
+}
+
+for (i in 1:length(PD$cpc_code)) {
+  if(PD$food_supply_stage[i] == "Farm" & (PD$activity[i] == "Transportation")){
+      PD$food_supply_stage[i] = "Transport"   
+  }
+}  
+    
+for (i in 1:length(PD$cpc_code)) {
+  if(PD$food_supply_stage[i] == "Farm" & (PD$activity[i] == "Storage" | 
+     PD$activity[i] == "Farm, Handling, Storage" | 
+     PD$activity[i] == "Stacking" | PD$activity[i] =="Handling, Storage" | 
+     PD$activity[i] == "Handling" | PD$activity[i] == "Lifting")) {
+      PD$food_supply_stage[i] = "Storage"  
+  }
+}
+
+subset(PD, activity == "Lifting")
+```
+
+**CC14** The activities that are not assigned yet are listed below
+```{r}
+unique((filter(PD, PD$food_supply_stage == "Farm"))$activity)
+```
+**CC15** Breaking up the SC stage of farm I
+```{r}
+for (i in 1:length(PD$cpc_code)) {
+  if(PD$food_supply_stage[i] == "Farm" & 
+     (PD$activity[i] == "Shelling, Threshing" | PD$activity[i] == "Winnowing" |                    
+      PD$activity[i] == "Drying" | PD$activity[i] == "Sorting" |    
+      PD$activity[i] =="Grading, Sorting" | PD$activity[i] == "Threshing" | 
+      PD$activity[i] == "Assembling, Farm" | PD$activity[i] == "Bagging" | 
+      PD$activity[i] == "Shelling" | PD$activity[i] == "Milling" | 
+      PD$activity[i] == "Drying, Farm")) {
+        PD$food_supply_stage[i] = "Processing"  
+  }
+}
+```
+
+**CC16** After constructing and before cleaning, 
+a copy is taken for the use later on.
+```{r}
+PD_copy <- PD
+```
+
+According to the definition of the scope, only supply chain stages until (exclusively) the retail stage are considered. Therefore all data supply chain stages of retail and further downstream need to be dropped. These are export, households, trader, wholesale, market and retail. Blank spaces and whole supply chain data needs to be dropped as well for it is of no use for the case. In the case of distribution, past-harvest, and whole suppply chain they are excludid because it is not clear which stage along the supply chain they are actually referring to.
+
+**CC17** Cleaning the food_supply_stage column
+```{r}
+# Filter out the SC stages that may be relevant for the scope of the thesis
+PD = subset(PD, !(food_supply_stage %in% c('Distribution','Export', 
+            'Households', 'Trader', 'Wholesale', 'Market', 'Post-harvest', 
+            'Retail', 'Whole supply chain', '')), drop=FALSE)
+```
+
+**CC18** Quick check-up on remaining farm data and deletion of the same
+```{r}
+head(filter(PD, food_supply_stage == "Farm"))
+# There are still 96 rows that are unassigned. They are dropped from the 
+# dataset, as it is not clear which SC stage they are referring to because they 
+# do either contain no data on the activity or they contain activity data that
+# cannot unambiguously be related to any supply chain stage.
+
+# As it is not clear, which SC stage they would come close to, the decision was 
+# made to drop them from the dataset used in this data analysis.
+PD <- filter(PD, food_supply_stage != "Farm")
+
+# Setting levels of the remaining SC stages is only important for the order by 
+# which the SC stages are shown later on in the plots.
+PD$food_supply_stage <- factor(PD$food_supply_stage, levels=c("Harvest",
+  "Processing", "Transport", "Storage"))
+```
+The following approach is sophisticated and implies that if in comparing of two data points country, commodity, year, method_data_collection, food_suppy_stage, region, treatment, reference, and URL are the same, while the combination of cause_of_loss or activity differ, the values of loss percentage are added, while all other columns stay the same.
+
+**CC19** Adding up values in the column of loss_percentage
+```{r}
+PD$gsize = 1
+PD$gID = 0
+
+PD_dc_comp <- PD %>%  
+  group_by(country, commodity, year, method_data_collection, 
+           food_supply_stage, region, treatment, reference, url) %>% 
+           distinct(cause_of_loss, activity, .keep_all = TRUE) %>%
+           ungroup()
+
+# The table "gap" is the data container of data points that don't need to be 
+# stacked as they occur without another data point sharing the same combination 
+# of features discussed above.
+gap = anti_join(PD, PD_dc_comp)
+
+PD_dc <- PD %>%   
+    group_by(country, commodity, year, method_data_collection, 
+             food_supply_stage, region, treatment, reference, url) %>% 
+             distinct(cause_of_loss, activity, .keep_all = TRUE) %>%
+             mutate(loss_percentage = sum(loss_percentage), 
+                    gID = cur_group_id(), gsize = n()) %>% 
+                    ungroup()
+
+PD <- rbind(PD_dc, gap)
+```
+
+# -3- EDA and Data Cleaning
+
+**CC20** - View on the structure of the data
+```{r}
+str(PD)
+```
+
+**CC21** Changing data types
+```{r}
+# The changes of data types is necessary for computations later in the course 
+# of the data analysis.
+PD$cpc_code <- as.numeric(PD$cpc_code)
+PD$Country <- as.factor(PD$Country)
+PD$country <- as.factor(PD$country)
+PD$food_category <- as.factor(PD$food_category)
+```
+
+
+## Outliers, missing data (and range)
+
+
+**CC22** Find missing data in interesting columns
+```{r}
+print ("Row and Col positions of NA values")
+summary(which(is.na(PD), arr.ind=TRUE))
+```
+As column 21 to 28 contain LPI data only, NAs are only found within the LPI data.
+
+**CC23** Searching for evidence of quality issues in contract to pure food losses
+```{r}
+print ("Quality issues")
+# Capitalized quatlity
+cache <- str_count(PD$cause_of_loss, "Quality")
+sum(cache)
+# Not capitlized quality
+cache <- str_count(PD$cause_of_loss, "quality")
+sum(cache)
+```
+
+**CC24** Subsetting of data containing LPI information
+```{r}
+# The reason the data was kept in the first place was that the data contains 
+# valuable data depicting the food losses itself.
+# As not to do interfere with research in coming code chunks, the data is 
+# subsetted
+PD_with_LPI <- subset(PD, !is.na(LPI_score))
+PD_with_LPI$food_supply_stage <- as.character(PD_with_LPI$food_supply_stage) 
+```
+
+Quality issues are cleary mentioned in the paper at several occasions
+
+**CC25** Ranges for all numeric data
+```{r}
+PD_numeric <- PD[,unlist(lapply(PD, is.numeric))]
+data.frame(min=sapply(PD_numeric,min),max=sapply(PD_numeric,max))
+
+PD_with_LPI_numeric <- PD_with_LPI[,unlist(lapply(PD_with_LPI, is.numeric))]
+data.frame(min=sapply(PD_with_LPI_numeric,min),
+           max=sapply(PD_with_LPI_numeric,max))
+```
+There is no apparent outlier when merely looking at the output of the code chunk above.
+
+One additional observation: The majority of data cleaning has already been done by the FAO, for example in as such as loss percentage_original has been transport in the so-called column loss_column by removing %-signs, computing averages when a range was filled in and transforming decimal data into the 100% scale, without adding the %-sign.
+
+Despite the first cleaning carried out by the FAO, ranges should be tested, as to not overlook outliers.
+There are no outliers of food loss.
+
+**CC26** - Count rows of the data set
+```{r}
+nrow(PD)
+```
+
+**CC27** - Ranges of selected columns
+```{r}
+unique(PD$food_supply_stage)
+```
+
+**CC28** Compare the two columns Country and country
+```{r}
+setdiff(PD$Country, PD$country)
+```
+It can be noted that both columns are exactly identical.
+
+**CC29** Eliminate the superflous Country-column
+```{r}
+PD <- select(PD, -c("Country"))
+```
+
+## -3- Summarization of the data
+
+**CC30** Conversion function for saving plots as png-files
+```{r}
+ready_conversion <- function(x) {
+  x +
+  theme(axis.text = element_text(size = 9)) +
+  # geom_text(aes(label = n), size = 3.5) +
+  theme(axis.title = element_text(size = 10.5)) +
+  theme(legend.title = element_text(size = 10)) +
+  theme(legend.text = element_text(size = 8))
+}
+```
+
+**CC31** Occurences of methods of data collection
+```{r}
+library(ggforce)
+# Prior to creating the plot the labeling lenght for the labeling:
+# "FAO's annual Agriculture Production Questionnaires" has to be reduced 
+# in length to a reasonable size
+
+PD$method_data_collection <- as.character(PD$method_data_collection)
+
+for (i in 1:length(PD$cpc_code)) {
+  if (PD$method_data_collection[i] == "") { 
+    PD$method_data_collection[i] =  "NA"
+  }
+}
+  
+unique(PD$method_data_collection)
+
+# JPEG device
+g <- ggplot(data = PD) + 
+  aes(x = method_data_collection) +
+  geom_bar(stat="count", fill = "steelblue") +
+  facet_zoom(ylim = c(0, 350)) +
+  ylab("Number of data points") +
+  xlab("Method of data collection")
+g
+jpeg("Occ_methods.png", quality = 100, width = 15, height = 10.5 ,  units = "cm", 
+     res= 300) 
+ready_conversion(g) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+dev.off()
+```
+
+**CC32** A closer look at the modelled estimates data
+```{r}
+PD_modelled <- subset(PD, method_data_collection == "Modelled Estimates")
+
+# Total number of modelled estimates within the dataset inside the scope of 
+# the thesis
+count(PD_modelled)
+
+# Unique data in the modelled estimates
+unique(PD_modelled$url)
+
+# Taking subsets of the modelled estimates data according to whether they 
+# derived from the APHLIS-database
+Aphilis_true <- subset(PD_modelled, url == "https://www.aphlis.net/en/page/20/data-tables#/datatables?tab=value_chain&metric=prc")
+Aphilis_false <- subset(PD_modelled, url == "")
+
+# Share of Aphlis data in relation to all modelled estimates
+(count(Aphilis_true))/(count(Aphilis_false)+count(Aphilis_true))
+
+# Share of Aphlis data in relation to whole dataset within the scope of
+# the thesis
+(count(Aphilis_true))/(count(PD))
+```
+
+**CC33** Food categories across APHLIS data
+```{r}
+unique(Aphilis_true$food_category)
+```
+All Aphlis data consists of cereal data only.
+
+Impact of both food supply chain stage and food category in food loss percentage is visualized by the means of a heat map, whose fill-scale is logarythmic. A logarythmic fill-scale was chosen do to the divergent nature of the data.
+
+**CC34** Data occurences across food supply stages
+```{r}
+g <- ggplot(data = PD) + 
+  aes(x = food_supply_stage) + geom_bar(stat="count")
+
+g
+
+jpeg("Occ_SC_stages.png", quality = 100, width = 15, height = 13 ,  
+     units = "cm", res= 300)
+ready_conversion(g)
+dev.off()
+```
+
+**CC35** Data occurrences across years
+```{r}
+PD$year <- as.character(PD$year)
+substrRight <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+
+PD$years <- substrRight(PD$year, 2)
+PD$years <- str_glue("'{PD$years}")
+PD$years <- as.factor(PD$years)
+
+p<-ggplot(data=PD, aes(x=years)) +
+  geom_bar(stat="count", fill = "steelblue") +
+  ylab("Number of data points") +
+  xlab("Year")
+p
+
+# Capture the plot:
+jpeg("Occ_years.png", quality = 100, width = 15, height = 8 ,  
+     units = "cm", res= 300)
+ready_conversion(p)
+dev.off()
+# https://stackoverflow.com/questions/7963898/extracting-the-last-n-characters-from-a-string-in-r
+```
+At the first glance it looks like the data points are relatively evenly spread throughout the years.
+
+Now a view on the same data, excluding the modelled data:
+
+**CC36** Data occurences across years 2000-2021, without modelled data
+```{r}
+PD_no_Model<- PD %>%
+  filter(PD$method_data_collection != "Modelled Estimates")
+
+g<-ggplot(data=PD_no_Model, aes(x=years)) +
+  geom_bar(stat="count", fill = "steelblue") +
+  ylab("Number of data points") +
+  xlab("Year")
+g
+
+jpeg("Occ_years_no_model.png", quality = 100, width = 15, height = 8 ,  
+     units = "cm", res= 300)
+ready_conversion(g)
+dev.off()
+```
+A significantly reduced number of data points is retreived when excluding the modelling data.
+
+**CC37** Checking entreis in the loss quantity column
+```{r}
+df_lq <- summary(!PD$loss_quantity == "")
+df_lq <- df_lq %>%
+  as.array() %>%
+  as.data.frame()
+  
+df_lq <- df_lq[2:3,]
+df_lq$Freq <- as.numeric(df_lq$Freq)
+df_lq$Freq <- (df_lq$Freq/nrow(PD))
+df_lq
+
+```
+The column only contains a small number of loss_quantity entries.
+Threrefore, the coumn should not be taken into account for the further analysis since they cannot be used for weighting.
+
+**CC38** Checking entries in the region column
+```{r}
+df_lq <- summary(!PD$region == "")
+df_lq <- df_lq %>%
+  as.array() %>%
+  as.data.frame()
+  
+df_lq <- df_lq[2:3,]
+df_lq$Freq <- as.numeric(df_lq$Freq)
+df_lq$Freq <- (df_lq$Freq/nrow(PD))
+df_lq
+```
+The column only contains a small number of 'region'-entries.
+Therefore, the column should not be taken into account for the further analysis since they cannot be used for weighting.
+
+**CC39** Data occurences across food categories
+```{r}
+g <- ggplot(data = PD) + 
+  aes(x = food_category) +
+  geom_bar(stat="count", fill = "steelblue") +
+  facet_zoom(ylim = c(0, 300)) +
+  ylab("Food category") +
+  xlab("Occurences in data set")
+g
+
+jpeg("Occ_FC.png", quality = 100, width = 15, height = 8 ,  
+     units = "cm", res= 300)
+  ready_conversion(g) + scale_x_discrete(guide = guide_axis(n.dodge=3))
+dev.off()
+```
+
+**CC40** Ordering the SC stages
+```{r, warning=FALSE}
+PD$food_supply_stage <- factor(PD$food_supply_stage, levels=c("Harvest",
+  "Processing", "Storage", "Transport"))
+```
+  
+**CC41** Data availability across food categories and SC stages
+```{r, warning=FALSE}
+library(plotly)
+library(stringr)
+library(gghighlight)
+
+cache1 <- PD %>%
+  group_by(food_supply_stage, food_category) %>% 
+  summarise_each(funs(mean))
+
+cache1$food_supply_stage <- as.factor(cache1$food_supply_stage)
+
+x <- PD %>% 
+  count(food_supply_stage, food_category)
+
+cache1 <- merge(cache1,x)
+cache1_copy_for_regr <- cache1
+
+cache2 <- ggplot(cache1, aes(x=cache1$food_supply_stage, 
+                             drop = F, y=cache1$food_category, drop = F, 
+                             fill=cache1$loss_percentage, showscale = F, 
+                             cex(2.5))) +
+  geom_tile() +
+  scale_fill_gradient(low="steelblue", high="steelblue", 
+                      name="Count data availibitly") + 
+                      xlab("Supply chain stage") +
+                      ylab("Food category") +
+                      scale_x_discrete(drop=FALSE) +
+                      scale_y_discrete(drop=FALSE)
+
+cache3 <- cache2 + theme(axis.text = element_text(size = 9)) +
+  geom_text(aes(label = n), size = 3.5, color = "white") +
+  theme(axis.title = element_text(size = 10.5)) +
+  theme(legend.title = element_text(size = 10)) +
+  theme(legend.text = element_text(size = 7)) 
+cache3
+
+jpeg("SC_FC_Occ_all_prior.png", quality = 100, width = 15, height = 8 ,  
+     units = "cm", res= 300) 
+ready_conversion(cache2) +
+  geom_text(aes(label = n), size = 2.9, color = "white")
+dev.off()
+```
+
+**CC42** Deleting the food categories dairy, eggs, meat and nuts & cacao beans due to insufficient data
+```{r}
+PD = subset(PD, !(food_category %in% c('Dairy', 'Eggs', 'Meat', 'N&C')), 
+            drop=TRUE)
+```
+
+**CC43** Data availability across food categories and SC stages without the deleted food categoriees
+```{r, warning=FALSE}
+cache1 <- PD %>%
+  group_by(food_supply_stage, food_category) %>% 
+  summarise_each(funs(mean))
+
+cache1$food_supply_stage <- as.factor(cache1$food_supply_stage)
+
+x <- PD %>% 
+  count(food_supply_stage, food_category)
+
+cache1 <- merge(cache1,x)
+cache1_copy_for_regr <- cache1
+
+cache2 <- ggplot(cache1, aes(x=cache1$food_supply_stage, drop = F, 
+                             y=cache1$food_category, drop = F, 
+                             fill=cache1$loss_percentage, showscale = F, 
+                             cex(2.5))) +
+                             geom_tile() +
+                             scale_fill_gradient(low="steelblue", 
+                                                 high="steelblue", 
+                                                 name="Your Legend") +  
+                             xlab("Supply chain stage") +
+                             ylab("Food category") +
+                             scale_x_discrete(drop=TRUE) +
+                             scale_y_discrete(drop=TRUE)
+
+cache3 <- cache2 + theme(axis.text = element_text(size = 9)) +
+                   geom_text(aes(label = n), size = 3.5) +
+                   theme(axis.title = element_text(size = 10.5)) +
+                   theme(legend.title = element_text(size = 10)) +
+                   theme(legend.text = element_text(size = 7))
+cache3
+
+jpeg("SC_FC_Occ_all_after.png", quality = 100, width = 15, height = 8 ,  
+     units = "cm", res= 300) 
+ready_conversion(cache2) +
+  geom_text(aes(label = n), size = 2.5)
+dev.off()
+```
+
+**CC44** Data availability across food categories and SC stages, no modelled data
+```{r, warning=FALSE}
+cache1 <- PD %>%
+  filter(method_data_collection != "Modelled Estimates") %>%
+  group_by(food_supply_stage, food_category) %>% 
+  summarise_each(funs(mean))
+
+cache1$food_supply_stage <- as.factor(cache1$food_supply_stage)
+
+x <- PD %>% 
+  filter(method_data_collection != "Modelled Estimates")  %>% 
+  count(food_supply_stage, food_category)
+
+cache1 <- merge(cache1,x)
+cache1_copy_for_regr <- cache1
+
+cache2 <- ggplot(cache1, aes(x=cache1$food_supply_stage, drop = F, 
+                             y=cache1$food_category, drop = F, 
+                             fill=cache1$loss_percentage, showscale = F, 
+                             cex(2.5))) +
+                             geom_tile() +
+                             scale_fill_gradient(low="steelblue", 
+                                                 high="steelblue", 
+                                                 name="Your Legend") + 
+  xlab("Supply chain stage") +
+  ylab("Food category") +
+  scale_x_discrete(drop=TRUE) +
+  scale_y_discrete(drop=TRUE)+ 
+  theme(axis.text = element_text(size = 9)) +
+  geom_text(aes(label = n), size = 3.5) +
+  theme(axis.title = element_text(size = 10.5)) +
+  theme(legend.title = element_text(size = 10)) +
+  theme(legend.text = element_text(size = 7))
+
+cache2
+
+jpeg("years_points_Data_AV_heatmap2.png", quality = 100, width = 15, height = 8,  
+     units = "cm", res= 300) 
+cache2
+dev.off()
+```
+
+**CC45** Measuring the overshodowing of data
+```{r, warning=FALSE}
+sub_all <- select(PD, food_supply_stage, food_category)
+sub_all$occ = 0
+
+cache0 <- sub_all %>%
+  group_by(food_supply_stage, food_category) %>% 
+  summarize(occ = n())
+
+cache0$food_supply_stage <- as.factor(cache0$food_supply_stage)
+
+sub_no_mod <- PD %>% filter(method_data_collection != "Modelled Estimates") %>% 
+  select(food_supply_stage, food_category)
+sub_no_mod$occ_no_mod = 0
+
+cache1 <- sub_no_mod %>%
+  group_by(food_supply_stage, food_category) %>% 
+  summarize(occ_no_mod = n())
+
+cache1$food_supply_stage <- as.factor(cache1$food_supply_stage)
+
+merged <- merge(cache0,cache1, by = c("food_supply_stage", "food_category"), 
+                all = TRUE)
+
+for(i in 1:length(merged$food_supply_stage)){
+  if(is.na(merged$occ_no_mod[i])){
+    merged$occ_no_mod[i] = 0
+  }
+}
+
+merged$shares = round((1-(merged$occ_no_mod/merged$occ)), 3)*100
+
+cache2 <- ggplot(merged, aes(x=merged$food_supply_stage, drop = F, 
+                             y=merged$food_category, drop = F, 
+                             fill=merged$shares, showscale = F, cex(2.5))) +
+  geom_tile() +
+  scale_fill_gradient(low="white", high="darkgrey", name="'Overshadowing [%]'") + 
+  xlab("Supply chain stage") +
+  ylab("Food category") +
+  scale_x_discrete(drop=TRUE) +
+  scale_y_discrete(drop=TRUE)+ 
+  theme(axis.text = element_text(size = 9)) +
+  theme(axis.title = element_text(size = 10.5)) +
+  theme(legend.title = element_text(size = 10)) +
+  theme(legend.text = element_text(size = 8))
+
+cache2
+jpeg("overshadowing.png", quality = 100, width = 15, height = 8 ,  
+     units = "cm", res= 300) 
+cache2 +
+  geom_text(aes(label = shares), size = 2.9)
+dev.off()
+```
+
+**CC46** Heat map of available data across countries and food categories
+```{r}
+library(gplots)
+
+PD$dummy <- rep(1, length(PD$m49_code))
+
+u <- data.frame(PD$country, PD$dummy) 
+
+cache1 <- PD[c("country", "dummy", "food_category")] %>%
+  group_by(country, food_category) %>% 
+  summarize(dummy = sum(dummy))
+
+cache2 <- ggplot(cache1, aes(x=cache1$country,
+                             y=cache1$food_category,
+                             fill=cache1$dummy)) +
+                             geom_tile() +
+  scale_fill_gradient(low="white", high="steelblue", 
+                      name="Data availability")
+cache2 <- cache2 + coord_flip()
+
+my_breaks = c(2, 10, 50, 250)
+cache2 <- cache2 + scale_fill_gradient(name = "Data availability", 
+                                       trans = "log", low="white", 
+                                       high="steelblue", breaks = my_breaks, 
+                                       labels = my_breaks) + 
+  ylab("Food categories") + 
+  xlab("Countries") + 
+  theme(legend.position=c(.3, -.125), 
+        plot.margin=grid::unit(c(0.5,0.5,1.5,0.5), "cm"), 
+        legend.direction ="horizontal")
+cache2
+
+jpeg("Data_AV_heatmap_countries_FC.png", quality = 100, width = 15, height = 17, 
+     units = "cm", res = 300) 
+ready_conversion(cache2)
+dev.off()
+```
+
+**CC47** Heat map of available data of countries and supply chain stages (Appendix)
+```{r}
+# Part of the appendix due to lack of relevance
+PD$dummy <- rep(1, length(PD$m49_code))
+
+u <- data.frame(PD$country, PD$dummy) 
+
+cache1 <- PD[c("country", "dummy", "food_supply_stage")] %>%
+  group_by(country, food_supply_stage) %>% 
+  summarize(dummy = sum(dummy))
+
+cache2 <- ggplot(cache1, aes(x=cache1$country,
+                             y=cache1$food_supply_stage,
+                             fill=cache1$dummy)) +
+                             geom_tile() +
+  scale_fill_gradient(low="white", high="steelblue", 
+                      name="Data avialability")
+cache2 <- cache2 + coord_flip()
+
+my_breaks = c(2, 10, 50, 250)
+cache2 <- cache2 + scale_fill_gradient(name = "Data avialability", 
+                                       trans = "log", low="white", 
+                                       high="steelblue", breaks = my_breaks, 
+                                       labels = my_breaks) + ylab("Countries") + 
+  xlab("Food supply chain stages") + 
+  theme(legend.position=c(.3, -.125), 
+        plot.margin=grid::unit(c(0.5,0.5,1.5,0.5), "cm"), 
+        legend.direction ="horizontal")
+cache2
+
+jpeg("Data_AV_heatmap_countries_SC_stages.png", quality = 100, width = 15, 
+     height = 17, units = "cm", res = 300) 
+ready_conversion(cache2)
+dev.off()
+```
+
+**CC48** Creating a word cloud for the cause of loss column
+```{r, warning = FALSE}
+library(wordcloud)
+library(RColorBrewer)
+library(wordcloud2)
+library(tm)
+
+# Overview of the availability of cause of loss data within the scope of the 
+# thesis.
+PD_with_comments_within_scope <- subset(PD, cause_of_loss != "")
+# Number of entries in the cause of loss column in the inner scope of the 
+# thesis.
+nrow(PD_with_comments_within_scope)
+
+# Comparison to the overall number of entires in the defined scope of 
+# the thesis.
+nrow(PD_with_comments_within_scope)/nrow(PD)
+
+# For the sake of fast computation only data points to no empty data in the 
+# column "cause of loss" will be included in this sub-data set.
+PD_with_comments <- subset(PD, cause_of_loss != "")
+
+# For the word cloud exactly the subset was taken that was later used for the 
+# cause of loss analysis
+
+# Create a vector containing only the text
+text <- PD_with_comments$cause_of_loss
+# Create a corpus  
+docs <- Corpus(VectorSource(text))
+
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+
+# Seed for reproducibility 
+set.seed(1234) 
+
+wordcloud <- wordcloud(words = df$word, freq = df$freq, min.freq = 1, 
+          max.words=80, random.order=FALSE, rot.per=0.35)
+
+jpeg("wordcloud.png", quality = 100, width = 15, height = 11, units = "cm", 
+     res = 300) 
+wordcloud
+dev.off()
+# Saving the word cloud as a png-file did unfortunately not work out. 
+# Picture had to be directly copied from RStudio
+# All code for word cloud taken from: https://towardsdatascience.com/create-a-word-cloud-with-r-bde3e7422e8a
+```
+
+**CC49** Overview of entries in the columm "cause of Loss":
+```{r}
+overall_entries <- length(PD_orig.$cause_of_loss)
+df_CoL_entries <- filter(PD_orig., cause_of_loss == "")
+no_CoL_entries <- length(df_CoL_entries$cause_of_loss)
+# Necessary for computing, since it wasn't saved as integer before
+overall_entries = as.integer(overall_entries)
+no_CoL_entries = as.integer(no_CoL_entries)
+round(overall_entries/no_CoL_entries,3)
+```
+Only about 1.03% of the data point contained with information in the cause of loss column.
+
+**CC50** Overview of food losses by supply chain stages:
+```{r}
+g <- ggplot(PD, aes(x = loss_percentage , y = food_supply_stage))+
+  geom_boxplot()+
+  xlab("Food loss [%]")+
+  ylab("Supply chain stage")
+g
+jpeg("boxplot_SC_losses.png", quality = 100, width = 1000, height = 800)
+ready_conversion(g)
+dev.off()
+```
+For an overview of the food losses across food categories it is important to compute the overall food loss adding up the food losses occurring at all SC stages.
+
+**CC51** Hotspot analysis I: creating a heat map across supply chain stages and food categories
+```{r, warning=FALSE, messages=FALSE}
+cache1.0 <- PD %>%
+  group_by(food_supply_stage, food_category) %>% 
+  summarise_each(funs(mean))
+
+x = PD %>% 
+  count(food_supply_stage, food_category)
+
+cache1.0 <- merge(cache1.0,x)
+
+cache2 <- ggplot(cache1.0, aes(x=cache1.0$food_supply_stage, 
+                               y=cache1.0$food_category, 
+                               fill=cache1.0$loss_percentage)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = c("red", "yellow", "lightyellow"), 
+                       values = c(1, 0.2, 0), name="Food losses [%]") +
+  xlab("Food category") +
+  ylab("Supply chain stage") 
+
+cache2
+
+cache3 <- cache2 +
+  theme(axis.text = element_text(size = 18)) +
+  geom_text(aes(label = round(loss_percentage, 1)), size = 8) +
+  theme(axis.title = element_text(size = 24)) +
+  theme(legend.title = element_text(size = 18)) +
+  theme(legend.text = element_text(size = 18)) +
+  geom_text(aes(label = round(loss_percentage, 1)))
+
+jpeg("FL_data_heatmap_red_white.png", quality = 100, width = 15, height = 12, 
+     units = "cm", res = 300) 
+ready_conversion(cache2) +
+  geom_text(aes(label = round(loss_percentage, 1)), size = 2.9)
+dev.off()
+```
+
+**CC52** Hotspot analysis II: creating stacked bar chart
+```{r}
+cache1.0$food_supply_stage <- as.character(cache1.0$food_supply_stage)
+
+cache1_no_doubling <- subset(cache1.0, !food_supply_stage %in% 
+                             c("Distribution", "WSC", "Post-harvest"))
+
+unique(cache1_no_doubling$food_supply_stage)
+
+plot <- ggplot(cache1_no_doubling, aes(fill=food_supply_stage, 
+                                       y=loss_percentage, x=food_category)) +
+  geom_bar(position="stack", stat = "identity") + 
+  xlab("Food category") + 
+  ylab("Food loss [%]") + 
+  scale_fill_brewer(palette = "Blues", name = "Supply chain stage", direction = -1)
+
+plot
+
+jpeg("FL_data_stacked_bar_chart.png", quality = 100, width = 15, height = 10, 
+     units = "cm", res = 300)
+ready_conversion(plot) + theme(legend.key.size = unit(0.5, 'cm'))
+dev.off()
+```
+
+**CC53** Discussion: Long Data and Wide Data and it's implications:
+Long Format Section (Appendix)
+```{r}
+close_up_veget._processing <- subset(PD, food_category == "Veget." & 
+                                     food_supply_stage == "Processing")
+close_up_veget._processing [,7:13]
+```
+
+**CC54** Long format data to wide format data (Appendix)
+```{r}
+library(tidyr)
+# Simpley selecting of columns
+PD_subset <- select(PD, c("m49_code", "commodity", "year", "food_supply_stage", "loss_percentage", "customs", "infrastructure", "international_shipments", "logistics_competence", "tracking_tracing", "timeliness", "food_category", "food_supply_stage"))
+
+# Certain information has to be aggregated for each supply chain stage
+PD_subset <- PD_subset %>% group_by(m49_code, commodity, year, 
+                                    food_supply_stage, food_category) %>% 
+  summarise(loss_percentage=
+            mean(loss_percentage),
+            customs=mean(customs),
+            infrastructure= mean(infrastructure),
+            international_shipments=mean(international_shipments),
+            logistics_competence=mean(logistics_competence),
+            tracking_tracing=mean(tracking_tracing),
+            timeliness=mean(timeliness),
+            .groups = 'drop') %>%
+  as.data.frame()
+
+# LPI data actually not necessary for identify, but they shall be kept.
+PD_wide_format <- pivot_wider(
+  PD_subset,
+  id_cols = c(m49_code, commodity, year, customs, infrastructure, 
+              international_shipments, logistics_competence, tracking_tracing, 
+              timeliness, food_category),
+  names_from = food_supply_stage,
+  values_from = loss_percentage,
+  names_prefix = "FL.in.percent_"
+)
+# FL.in.percent_ is a remnant of the countries with missing FLI or missing 
+# LPI data
+```
+
+**55** Creating a stacked bar plot for the data in wide format
+```{r}
+PD_wide_format <- PD_wide_format %>%
+  mutate_at(c(11:14), ~replace(.,is.na(.),0))
+names(PD_wide_format) <- str_replace_all(names(PD_wide_format), c(" " = "_"))
+
+cache1_wf <- PD_wide_format %>%
+  group_by(food_category) %>%
+  summarise(n=n(),
+            Harvest = mean(FL.in.percent_Harvest, na.rm = T),
+            Storage = mean(FL.in.percent_Storage, na.rm = T),
+            Transport = mean(FL.in.percent_Transport, na.rm = T),
+            Processing = mean(FL.in.percent_Processing, 
+                                  na.rm = T))
+
+cache2_wf <- cache1_wf %>%
+  gather(., supply_chain_stage, food_loss, 3:6, -n)
+
+ggplot(cache2_wf, aes(fill=supply_chain_stage, y=food_loss, x=food_category)) + 
+  geom_bar(position="stack", stat = "identity") + 
+  xlab("Food category") + 
+  ylab("Supply chain stage") + 
+  xlab("Food category") + 
+  ylab("Food loss [%]") + 
+  scale_fill_brewer(palette = "Blues", name = "Supply chain stage", 
+                    direction = -1)
+```
+
+**CC56** - Treemap data quality for supply chain stages, incl. facet wrapt
+```{r}
+library(treemap)
+library(treemapify)
+library(ggplot2)
+
+PD_v2 = PD
+
+PD_v2$food_supply_stage <- as.character(PD_v2$food_supply_stage)
+
+# Renaming of methods of data collection to decrease complexity on the chart
+PD_v2$method_data_collection <- 
+  recode_factor(PD_v2$method_data_collection, `Modelled Estimates` = "Modell", 
+  `No Data Collection Specified` = "Not spec.", 
+  `FAO's annual Agriculture Production Questionnaires` = "FAO Quest.", 
+  `Literature Review` = "Literature", 
+  `Controlled Experiment` = "Experiment", 
+  `Case Study` = "CS", `Expert Opinion` = "Expert")
+
+unique(PD_v2$method_data_collection)
+  
+PD_copy2 <- PD_v2 %>%
+  drop_na(c("infrastructure", "logistics_competence", "tracking_tracing",
+            "food_supply_stage")) %>%
+  count(food_supply_stage, method_data_collection)
+
+PD_copy2 <- subset(PD_copy2, )
+
+PD_copy2$q_score = NA
+
+PD_copy2$method_data_collection <- as.character(PD_copy2$method_data_collection)
+
+PD_copy2 = subset(PD_copy2, (food_supply_stage %in% c("Farm", "Transport", 
+                                                      "Storage", "Harvest", 
+                                                      "Whole supply chain", 
+                                                      "Processing", 
+                                                      "Post-harvest", 
+                                                      "Distribution")),
+                  drop=FALSE)
+
+for(j in 1:length(PD_copy2$n)) {
+
+if(PD_copy2$method_data_collection[j] == "Modell") {PD_copy2$q_score[j] = 2}
+if(PD_copy2$method_data_collection[j] == "Not spec.") {PD_copy2$q_score[j] = 2}
+if(PD_copy2$method_data_collection[j] == "FAO Quest.") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "Literature") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "Experiment") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "CS") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "Survey") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "Census") {PD_copy2$q_score[j] = 1}
+if(PD_copy2$method_data_collection[j] == "Expert") {PD_copy2$q_score[j] = 1}
+}
+
+cache1 <- PD_copy2
+
+cache1$q_score <- as.factor(cache1$q_score)
+cache1$food_supply_stage <- as.character(cache1$food_supply_stage)
+cache1$method_data_collection <- as.character(cache1$method_data_collection)
+cache1$n <- as.character(cache1$n)
+cache1$q_score <- as.character(cache1$q_score)
+
+# Start of building the model and return the outputs
+  
+new_row1 = c("dummy", "dummy", "0", "1")
+new_row2 = c("dummy", "dummy", "0", "2")
+
+cache1 <- rbind(cache1, new_row1, new_row2)
+
+cache1$food_supply_stage <- as.factor(cache1$food_supply_stage)
+cache1$method_data_collection <- as.factor(cache1$method_data_collection)
+cache1$n <- as.integer(cache1$n)
+cache1$q_score <- as.factor(cache1$q_score)
+
+cache1 %>% drop_na(method_data_collection)
+cache1 %>% drop_na(q_score)
+
+cache1$q_score <- as.factor(cache1$q_score)
+
+cache1 <- filter(cache1, food_supply_stage != "dummy")
+
+show <- ggplot(cache1, aes(area = n, fill = q_score, 
+                           label = method_data_collection, 
+                           subgroup = method_data_collection)) +
+  facet_wrap(~ food_supply_stage) +
+  geom_treemap() +
+  geom_treemap_text(colour = "black", place = "centre",
+                    grow = FALSE, alpha = 1, size = 14) +
+  geom_treemap_subgroup_border() +
+  scale_fill_brewer(palette = c("Greys"), direction = 1, 
+                    labels = c("High", "Low")) +
+  labs(fill = "Expected data quality")
+
+print(show)
+
+jpeg("Tree_part1.png", quality = 100, width = 15, height = 6, 
+     units = "cm", res = 300)
+ready_conversion(show) + theme(legend.key.size = unit(0.5, 'cm'))
+dev.off()
+```
+
+**CC57** Treemap data quality for food categories, incl. facet wrap
+```{r}
+# Renaming of methods of data collection: Not spec = "No Data Collection 
+# Specified", FAO quest = "FAO's ann. Questionaires", Literature = "
+# Literature Review", Experiment = "Controlled Experiment", CS = "Case Study", 
+# Expert = "Expert Opinion"
+
+library(treemap)
+
+PD_v2 = PD
+
+PD_v2$food_supply_stage <- as.character(PD_v2$food_supply_stage)
+
+PD_v2$method_data_collection <- 
+  recode_factor(PD_v2$method_data_collection, 
+                `Modelled Estimates` = "Modell", 
+                `No Data Collection Specified` = 
+                  "Not spec.", `FAO's annual Agriculture Production Questionnaires` = 
+                  "FAO Quest.", `Literature Review` = "Literature", `Controlled Experiment` = 
+                  "Experiment", `Case Study` = "CS", `Expert Opinion` = "Expert")
+
+unique(PD_v2$method_data_collection)
+
+PD_copy2 <- PD_v2 %>%
+  drop_na(c("infrastructure", "logistics_competence", "tracking_tracing", 
+            "food_category", "method_data_collection")) %>%
+  count(food_category, method_data_collection)
+
+PD_copy2$q_score = NA
+
+PD_copy2$method_data_collection <- as.character(PD_copy2$method_data_collection)
+
+
+for(j in 1:length(PD_copy2$n)) {
+  if(PD_copy2$method_data_collection[j] == "Modell") {PD_copy2$q_score[j] = 2}
+  if(PD_copy2$method_data_collection[j] == "Not spec.") {PD_copy2$q_score[j] = 2}
+  if(PD_copy2$method_data_collection[j] == "FAO Quest.") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "Literature") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "Experiment") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "CS") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "Survey") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "Census") {PD_copy2$q_score[j] = 1}
+  if(PD_copy2$method_data_collection[j] == "Expert") {PD_copy2$q_score[j] = 1}
+}
+
+cache1 <- PD_copy2
+
+cache1$q_score <- as.factor(cache1$q_score)
+cache1$food_category <- as.character(cache1$food_category)
+cache1$method_data_collection <- as.character(cache1$method_data_collection)
+cache1$n <- as.character(cache1$n)
+cache1$q_score <- as.character(cache1$q_score)
+
+# Start of building the model and return the outputs
+
+new_row1 = c("dummy", "dummy", "0", "1")
+new_row2 = c("dummy", "dummy", "0", "2")
+
+cache1 <- rbind(cache1, new_row1, new_row2)
+
+cache1$food_category <- as.factor(cache1$food_category)
+cache1$method_data_collection <- as.factor(cache1$method_data_collection)
+cache1$n <- as.integer(cache1$n)
+cache1$q_score <- as.factor(cache1$q_score)
+
+cache1 %>% drop_na(method_data_collection)
+cache1 %>% drop_na(q_score)
+
+cache1$q_score <- as.factor(cache1$q_score)
+
+cache1 <- filter(cache1, food_category != "dummy")
+
+show <- ggplot(cache1, aes(area = n, fill = q_score, 
+                           label = method_data_collection, 
+                           subgroup = method_data_collection)) +
+  facet_wrap(~ food_category) +
+  geom_treemap() +
+  geom_treemap_text(colour = "black", place = "centre",
+                    grow = FALSE, alpha = 1, size = 14) +
+  geom_treemap_subgroup_border() +
+  scale_fill_brewer(palette = c("Greys"), direction = 1, 
+                    labels = c("High", "Low")) +
+  labs(fill = "Expected data quality")
+print(show)
+
+
+jpeg("Tree_part2.png", quality = 100, width = 15, height = 6, 
+     units = "cm", res = 300)
+ready_conversion(show) + theme(legend.key.size = unit(0.5, 'cm'))
+dev.off()
+```
+
+--------------------------------------------------------------------------------
+-4- Pairwise relationship between variables
+--------------------------------------------------------------------------------
+
+Consideration of different development stages/logistics performance of countires
+
+**CC58** Scatterplot of LPI_score vs. food_loss
+```{r}
+cache <- ggplot(PD, aes(x=LPI_score, y=loss_percentage)) + 
+  facet_wrap(~ food_supply_stage + 
+               food_category, ncol = 4) +
+  xlab("LPI score") +
+  ylab("Food loss [%]") +
+    theme(strip.text = element_text(size = 7))
+
+cache
+jpeg("years_points_Data_heatmap_general.png", quality = 100, width = 15, 
+     height = 16, units = "cm", res = 300) 
+ready_conversion(cache) + geom_point(size=0.05)
+dev.off()
+```
+
+**CC59** Preparation of country segmentation into three classes
+```{r}
+box_plot_LPI <- PD[c("country", "LPI_score")] %>%
+  group_by(country) %>% 
+  summarize(LPI_score = mean(LPI_score))
+box_plot_LPI
+
+boxplot(box_plot_LPI$LPI_score, ylab ="Overall LPI score")
+
+# Note, there is one outlier, with the LPI Value of 3.5
+box_plot_LPI <- box_plot_LPI[order(box_plot_LPI$LPI_score),]
+# HDI could be tested here also
+quantiles = quantile(box_plot_LPI$LPI_score, na.rm = T, probs = c(.333,.666))
+limitgroup1 = as.numeric(quantiles[1])
+limitgroup2 = as.numeric(quantiles[2])
+
+# Create empty column, named CPG, which means 
+# "Country Performance Group"
+PD <- PD %>%
+  add_column(CPG = NA)
+
+PD <- PD %>%
+  drop_na(LPI_score)
+
+# Remove NAs fors!!!
+for (i in 1:length(PD$LPI_score)) {
+  if (PD$LPI_score[i] <= limitgroup1) { 
+    PD$CPG[i] = "Low performance countries"
+  } else if (PD$LPI_score[i] <= limitgroup2) { 
+    PD$CPG[i] = "Medium performance countries"
+  } else if (PD$LPI_score[i] <= 999) { 
+    PD$CPG[i] = "High performance countries"
+  }
+  else if (PD$LPI_score[i] == NA) { 
+    PD$CPG[i] = "None"
+  }
+}
+
+PD$CPG <- as.factor(PD$CPG)
+summary(PD$CPG)
+```
+
+**CC60** Further exploration, outlier box plot of LPI-values
+```{r}
+unique((subset(PD, PD$LPI_score > 3.3))$country)
+```
+The outstanding LPI_score belongs to South Africa
+
+**CC61** Overview of countries in the country performance groups
+```{r}
+# Low Performance
+unique((subset(PD, PD$CPG == "Low performance countries"))$country)
+
+# Medium Performance
+unique((subset(PD, PD$CPG == "Medium performance countries"))$country)
+
+# High Performance
+unique((subset(PD, PD$CPG == "High performance countries"))$country)
+
+unique((subset(PD, PD$CPG == "None"))$country)
+```
+
+**CC62** Number of occurences inside the cells
+```{r, warning = FALSE}
+# Re-order the CPG-labels
+PD$CPG = factor(PD$CPG, levels = c("Low performance countries", "Medium performance countries", "High performance countries"))
+  cache1 <- PD %>%
+    group_by(food_supply_stage, food_category, CPG) %>% 
+    summarise(mean_loss = mean(loss_percentage, na.rm = T))
+  
+  colnames(cache1) <- c('food_supply_stage', 'food_category', 'CPG', 
+                        'mean_loss')
+  
+  x = PD %>% 
+    count(food_supply_stage, food_category, CPG)
+  cache1 <- merge(cache1,x)
+  
+  cache2 <- ggplot(cache1, aes(x=cache1$food_supply_stage, drop = F, 
+                               y=cache1$food_category, drop = F, 
+                               fill=cache1$mean_loss)) +
+    geom_tile() +
+    scale_fill_gradient(low="steelblue", high="steelblue", name="Your Legend") +
+    xlab("Supply chain stage") +
+    ylab("Food category") +
+    scale_x_discrete(drop=FALSE) +
+    scale_y_discrete(drop=FALSE) +
+    facet_wrap(~CPG, ncol = 1)
+cache2
+
+jpeg("DA_CPG.png", quality = 100, width = 15, height = 15, units = "cm", 
+     res = 300) 
+ready_conversion(cache2) +
+geom_text(aes(label = n), size = 3, color = "white")
+dev.off()
+
+# Examining group sizes:
+
+# High performance countries:
+nrow(PD %>% filter(CPG == "Low performance countries"))
+
+# High performance countries:
+nrow(PD %>% filter(CPG == "Medium performance countries"))
+
+# High performance countries:
+nrow(PD %>% filter(CPG == "High performance countries"))
+```
+Immediate observation:
+As for the observations of countries with a low LPI Index there as an apparent lack of data for many FL spots belongign cereals data, which overwhelmingly originated from a single source, a model. 
+Probably, there is lacking food loss research taking place in these countries, therefore there aren't many more observations on other food categories and the related supply chain stages.
+
+**CC63** Converting food categories back to categorical values
+```{r}
+PD$food_category <- as.factor(PD$food_category)
+```
+
+**CC64** Preparing LPI regression analysis
+```{r}
+# For the regression anaylsis, it is important to only consider one 
+# representative of each stacked set of data points for the regression 
+# eligibility.
+
+Combi_selector <- function(f_category, sc_stage){
+x0 <- subset(PD_with_LPI, gID == 0)
+xelse <- subset(PD_with_LPI, gID != 0)
+xelse <- xelse[!duplicated(xelse$gID),]
+x <- rbind(x0, xelse)
+
+x <- x %>%
+  filter((method_data_collection != "Modelled Estimates") & 
+         (method_data_collection != "")) %>% 
+  filter(food_supply_stage == sc_stage) %>% 
+  filter(food_category == f_category)
+xe <- str_glue('{f_category}_{sc_stage}')
+assign(xe, x, envir = globalenv())
+}
+
+# Now selecting the data of the single FL spots
+Combi_selector("Cereals", "Harvest")
+Combi_selector("Cereals", "Processing")
+Combi_selector("Cereals", "Storage")
+Combi_selector("Cereals", "Transport")
+
+Combi_selector("Fruits", "Harvest")
+Combi_selector("Fruits", "Processing")
+Combi_selector("Fruits", "Storage")
+Combi_selector("Fruits", "Transport")
+
+Combi_selector("O&P", "Harvest")
+Combi_selector("O&P", "Processing")
+Combi_selector("O&P", "Storage")
+Combi_selector("O&P", "Transport")
+
+Combi_selector("R&T", "Harvest")
+Combi_selector("R&T", "Processing")
+Combi_selector("R&T", "Storage")
+Combi_selector("R&T", "Transport")
+
+Combi_selector("Veget.", "Harvest")
+Combi_selector("Veget.", "Processing")
+Combi_selector("Veget.", "Storage")
+Combi_selector("Veget.", "Transport")
+```
+
+**CC65** Sample size and regression eligibility
+```{r, warning=FALSE}
+cache1 <- PD_with_LPI %>%
+  group_by(food_supply_stage, food_category) %>% 
+  filter((method_data_collection != "Modelled Estimates") & 
+        (method_data_collection != "")) %>%
+  filter((food_category != "Dairy") &
+        (method_data_collection != "N&C")) %>%        
+  summarise_each(funs(mean))
+
+cache1$food_supply_stage <- as.factor(cache1$food_supply_stage)
+
+x0 <- subset(PD_with_LPI, gID == 0)
+xelse <- subset(PD_with_LPI, gID != 0)
+xelse <- xelse[!duplicated(xelse$gID),]
+x <- rbind(x0, xelse)
+
+x <- x  %>% 
+  filter((method_data_collection != "Modelled Estimates") & 
+        (method_data_collection != "")) %>% 
+  count(food_supply_stage, food_category)
+
+cache1 <- merge(cache1,x)
+cache1_copy_for_regr <- cache1
+
+cache1_copy_for_regr$RegrIncl = (cache1_copy_for_regr$n > 29)
+
+cache2 <- ggplot(cache1_copy_for_regr, aes(x=food_supply_stage, y=food_category, 
+                                           drop = F, fill=RegrIncl, 
+                                           showscale = F)) +
+  geom_tile() +
+  xlab("Supply chain stage") +
+  ylab("Food category") +
+  scale_y_discrete(drop=TRUE) +
+  scale_fill_discrete(name = "Regression eligibility")
+
+cache2 + geom_text(aes(label = n), size = 3)
+
+jpeg("Reg_Elig.png", quality = 100, width = 15, height = 7, 
+     units = "cm", res = 300) 
+ready_conversion(cache2) +
+geom_text(aes(label = n), size = 3)
+dev.off()
+```
+The combinations of food categories and supply chain stages eligible (>30 data points) for the regression analysis are:
+
+cereals/harvest
+cereals/processing
+cereals/storage
+
+O&P/storage
+
+**CC66** Building the regression function and a close-up look on the countries and thier occurrences
+```{r}
+RegrFunction <- function(x){
+# Dividing the whole data into sub sets
+  name <- deparse(substitute(x))
+  x <- x %>% drop_na(c("infrastructure", "logistics_competence", 
+                       "tracking_tracing")) %>% 
+    filter(method_data_collection != "Modelled Estimates")
+  
+# Start of building the model and return the outputs
+  model_outcome <- summary(lm(loss_percentage ~ 
+                                infrastructure+logistics_competence+
+                                tracking_tracing, data = x))
+# Naming the models
+  ye <- str_glue('MO_{name}')
+  assign(ye, model_outcome, envir=globalenv())
+}
+
+# Showing the countries that contribute data to the respective regression 
+# analysis and how many data points are associated with them
+close_up <- function(spot){
+spot <- filter(spot, (spot$method_data_collection != "Modelled Estimates") | 
+                 (spot$method_data_collection != ""))
+spot$country <- as.factor(spot$country)
+spot <- spot[!is.na(spot$country), ]
+summary(spot$country)
+}
+```
+
+**CC67** Running the regression function subsets of data that show eligible sample size, selected in CC65
+```{r}
+RegrFunction(Cereals_Harvest)
+close_up(Cereals_Harvest)
+MO_Cereals_Harvest
+
+RegrFunction(Cereals_Processing)
+close_up(Cereals_Processing)
+MO_Cereals_Processing
+
+RegrFunction(Cereals_Storage)
+close_up(Cereals_Storage)
+MO_Cereals_Storage
+
+RegrFunction(`O&P_Storage`)
+close_up(`O&P_Storage`)
+`MO_O&P_Storage`
+```
+
+Retriving meaning from cause of loss data by the means of NLP:
+Classification/Causalitiy-Classification for decision support model:
+
+**CC68** Sample size and NLP eligibility
+```{r}
+# Entries in the cause of loss column
+nrow(PD)
+# Entries in the cause of loss column, without modeled estimates
+nrow(PD %>% 
+  filter(cause_of_loss != ""))
+
+PD_cache <- PD %>%
+  filter(cause_of_loss != "")  %>%
+  group_by(food_supply_stage, food_category) %>%
+  count(.)
+
+nrow(PD %>% 
+  filter(cause_of_loss != ""))
+
+PD_cache$RegrIncl = (PD_cache$n > 9)
+
+cache2 <- ggplot(PD_cache, aes(x=food_supply_stage, y=food_category, 
+                                           drop = F, fill=RegrIncl, 
+                                           showscale = F)) +
+  geom_tile() +
+  xlab("Supply chain stage") +
+  ylab("Food category") +
+  scale_y_discrete(drop=TRUE) +
+  scale_fill_discrete(name = "NLP eligibility")
+
+cache2 + geom_text(aes(label = n), size = 3)
+
+jpeg("Reg_Elig_NLP.png", quality = 100, width = 15, height = 7, 
+     units = "cm", res = 300) 
+ready_conversion(cache2) +
+geom_text(aes(label = n), size = 3)
+dev.off()
+```
+
+**CC69** Direct hand-over of a data frame from to python can be avoided by storing it as a csv-file, then opening the csv-file again.
+```{r}
+# Since the SC stages Households, wholesale, market and retail are out of the 
+# project's scope.
+PD_with_comments = subset(PD_copy, !(food_supply_stage %in% c('Households', 
+                                                              'Wholesale', 
+                                                              'Market', 
+                                                              'Retail')), 
+                          drop=FALSE)
+
+# For the sake of fast compoutation only data points to no empty data in the 
+# column "cause of loss" will be included in this sub-data set.
+PD_with_comments <- subset(PD_with_comments, cause_of_loss != "")
+PD_with_comments <- PD_with_comments %>% select(cause_of_loss, index)
+
+#Adding an Index-Column to identify the columns later on
+PD_with_comments <- PD_with_comments %>% mutate(id = row_number())
+write.csv(x = PD_with_comments, file = "PD_with_comments_all_SSA_all_SC.csv")
+
+# Number of entries in the cause of loss column
+length(PD_with_comments$index)
+```
+
+### Classification task including cuasality:
+
+**CC70** Prepare for use of Python
+```{r, eval = FALSE}
+library(reticulate)
+# It's necessary to use the anaconda shell as a package manager
+use_python("C:/Users/User/anaconda3", required = T)
+```
+
+Authentication via session token, then using an API for automated use of ChatGPT. When running the script, probably a new token has to be generated, which can be accessed when logged in on ChatPGT via F12 -> Application -> session token
+
+**CC71** Authentification via sesseion token
+```{python, eval = FALSE}
+# For the sake of a seamless computation of all code chunks, the code chunks in 
+# python were set to eval = False, so that they are not run by default.
+# The instructions for using the ChatGPT API and its implementation in Python 
+# were derived from a YouTube video by (1littlecoder 2022) 
+# https://www.youtube.com/watch?v=S3okwVkxDgA
+
+from pyChatGPT import ChatGPT
+session_token = 'eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..DWL2ozYHLSZVMTv6.a3R7TuIrsnWJ0EN2glb9BDIgY5-FaueJmFSUg7C61D4lRvzQkXjUiBFdwjw1F4jq73Io3uw7DRRTgZf8AqGwMbRO5qJz_BKec64ly3sIA6tStjV90v8K9_JRMepN56wPqSSa-hFKV9DgV9LLHU0X2NbsSc_ZoL_2CptEtVvz9u9zuPJzz_hUn-YR689zmfR2SjBiOlc7PNtvpoogjG5HSLt3J5mHkvTBDQ25lgHewRsI1Q-7X8LpVIMsGdRyhntGYFI5sovQ6u_cT2BWOBHCiI_-_PhoG-UJoppYf3xbDoxAMw_kiQ23Z-iW99VOX9Ci5l3NInhkSXh4BCavTQ2lzTbRgLF_csvlKY9gJvq-HSmj2RC6ZHfHAIM22CjjGi0hPzNl9BfVHHa8xMLvX7wM-OJ3Sl-xarU5XgvgnTeVezksXXpTH3X8QuSBHTq6XOK7OSBOXrn8qk4BoybJxGoVBKTxekbsBpAp24iYIQYNiiLvF_3Tb2iysx3ZryR8uyKwb9ML9aCQRh0E95cJVJzCwJXPK1lxuvrmq4da7bE4AaINEs6446YfxLfd3KV8Dw9mPznFAvbcIvsx3CLxjMAtsgnv0ZSxOpzvl76czAX6aG4SKeTrZ9ko5BQxBxaK4MxOpV-UZNPZI9vFx9ZuHlNc_MSv_BY-jabmJsZJo48nGiWAeQsc3ikeS44gvFAZXrj166t5mlaTn5GfzZQ2723xphLRi5x3zf-ktneDXhAAq5hChC1lczY_VMdJfdVw52EfVnzE9BjXSdgdGkfzROVurH_JbNnOERI93sU97_eY1Da5hwGiLsBAtaNUpV5KJLk2_Dwr34C7-kl_oxEJesfEYwKOEmaeUR3tiE3K6ysBNBYpTu1yh0Yup7b9wLtgwPx_XjZN3f0Ob1AcC_SHqQ84fm7zXq61NUovzJHX9oGF9ztKtMtP1q3MRcfZYoUeol9tb3IwkTJUw3S-UDrE96CjwO5Psi-d8903VPZpyInFpg5_J-4byEJdyP_cKfizKjKeF6OwDGwK7oAzT5r0XAeRkr0Nt-Kbi_JjmByIRZ9QCpNV-zqFV6-Sorxq2sQAm_K6nP2PudqyTH_tDVPUkvWpIJzQHt6gFYQuvKXwVSJaWsDVbHxVydW3NvW60sgmlmY6BcnrY9bsUqwQuJkGGuS9oZmQuo_PBLgoMTYgwXobar4QRusN2yNHRblnvvNvxunpdQqYnfjkS44k_tkI1rA_IwCXIyKLDu-tkba3jELs6vJWqBKTsi4yNJClIyuCQGS9jaU8F2gfbOfB2rq4vVkp90Fasm72d-IeCcU3yg5MX0THSvGf5b5s5dwH52tzsDo7WA1Wxuc5rwvgfuOPJ-_lYZWYc6NRHNu0E5Y205Jsf4EPaNSlmaPIUxgxxV97aGQdLheouTZg2NijIaKC102IjEy250v445_7PtXVWpb8UeHUFsXcNA7sx_0QOLE29VoLERC-p8Tr0bnTGGuUiyuGb7RaEuC7-kEbEBhAnqbiovcxf4E8Ukl8WQ6rRIwriwWWFCLERGxD2U_WPxmmOrfUrrRwzbpLaFuHnZPamTZk_sLYYcHfZAQ6kCmL9GInm84k_JmyCVB0AI7C5snP6fhaFzI73jkI5A7ZRDj3EICJG-rYZm3PhGJxm9Up7qzCHuLD1Qcszsoo4KrH9IOKRWUoYulRAus9lomOHAfusvCV9-wRPX4ROvhUddn635S5F-GACByg0uJyl66rDJZ1MV3rIOJ0kCxRH1Co4CBMsAeleY7mZp83689WhUGkbsVl1QY6EZlHnbujKIXRbScP3d8HJM33Lzur41uo7grIW2JpfYfKSVDRjZ43wAg7eEWnE6bU0fBBubAFzqXWLLKi_148vVQnUKLMi2Dy1NfJ4ILjkVnwPvnnROS9Vk8QNuvs7ArBsOJlr4pehO9cVP8A4UFKkhrrG8OmatmLjtBGto3Uhykx4T5jGP66vz4U4qNmZ7U-1t15Z14O6mbAHynMGHws8ZTmpM6ugJNyliIIh2PnknfNzS_JxASSspLabl2tGzVjKrQAKtDS7505bQRDu4_vxmwExYPl5OiHZACxDMCsn81GQsCV44irsr3AuJ0IiWY_YeiwlYL0ywfJdAFhJ2AVhcgJ7NbLj5IM7heyPfczM6mgNzS2TeLieGK9NgtuFbq3wKaVJOUM00INFEuHVIwh-1U2D5ef3FBHSHL0JPxX2_QZ_JO2IuadnwJmVduVWGBPmH31Zs7HowhsSSyQ2VyVqemgJDbIZBgq2nc8OwcugEyTQ4qZL4Ck6sVW5JfR58T0gkU8SoYqi0a6KsK7HNw_ybwdGg7xobVGCdQOxOSu_gNOdY3GTYvG7Mrt2P6vs9gDQQOOijlznNbxtJ6V0IXR7YTuqhS3KR96cs7ALPhjdFvz1AAyplEDJdd2rJBv5coqqDPd6O5ifN8GOFOaDRQ25NaOyRev-_h_HNb1nA938BAI2-tvAKM_Wdw1qi07OYWp_YYhVVLMctLPR-n-M58Ov8H3V7J5vXA1j0X5Ekwt152m1iNiv-krUfuMxq3-ZnzMaKDxUKiLacLfCwYcNwhBpF_Tac4qIaQaf1qxD-x38f06Ea4iZlwbc6xdn2DwIzHM-cK-nBLf3G_G4f9_nTu7hzH7jxJZ-6SZrtrIVHBVhpk9VmJx1qneYDzqa-fR26-pS05XQyR1pMQNZ7QhNO1d9U4.XaaehEP23hT56v64MzdTLA'
+api = ChatGPT(session_token)
+```
+
+Package for ChatGPT-API only exists for Python. Therefore, the python programming environment inside the RMarkdown had to be used.
+
+One major problem doing the assigment task with the API was that in the case of the few entries in which multiple causes of losses were given, the classification failed. Therefore, these entries needed to be cleaned in a way that they would only contain one cause of loss. As to find a way to achieve this, always the first cause of loss was chosen and other causes of loss thereafter were deleted.
+The result of the cleaned cause of loss table can be retrieved from the GitHub Repository.
+
+**CC72** IMport libraries and initialize matrix to store the results in
+```{python, eval = FALSE}
+# For the sake of a seamless computation of all code chunks, the code chunks in 
+# python were set to eval = False, so that they are not run by default.
+
+import pandas as pd
+import numpy as np
+import json
+
+PD_with_comments_edi = pd.read_excel('CoLs_Edited.xlsx', 
+sheet_name='CoLs Edited')
+
+# v0 is a dummy vector, which is used to to initialize the 
+# data frame "vector_collect"
+vectorcollect = np.array([0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+```
+
+**CC73** ChatGPT query
+```{python, eval = FALSE}
+# Data of data retrieval: in the night from the 29th to the 30th Jan, acc. 
+# to UTS +1. In reality, the following chunk had to be executed several times 
+# since ChatGPT only allows for about 60 inquiries per hour to prevent excessive 
+# use of its server capacities coming from the same IP address. After about 
+# 60 data retrivals, I had to wait for another hour.
+
+  i = (vector_collect.ndim-1)
+  while i <(len(PD_with_comments_edi)-1):
+  cachy = PD_with_comments_edi.loc[i, "cause_of_loss_edit"]
+  resp = api.send_message(f"What's the best way to reduce food loss if the cause of loss is {cachy} ? Possible fields of action for counter measures would be: '-1- Tranparency' which is described as 'Increase of transparency within a company as well as between companies of a network', '-2- Quality management', which is described as 'Improvement of quality management for early detection of weaknesses'. '-3- Packaging managment' which is described as Improvement of packaging management during transport and storage processes as well as for distribution to the end customer, loading of vehicles, and coordination of vehicles', '-3- Financial opportunities' which is described as 'Providing appropriate financial support from the administration to weaker network partners', '-4- Transport optimization' which is described as 'Improvement of transport management with regard to route planning, loading of vehicles, and coordination of vehicles', '-5- Warehouse management' which is described as 'Improvement of warehouse management using suitable storage equipment, storage strategies, and adapted layout planning'. '-6- Network structure' which is described as 'Improvement of the network structure using strategic network planning and location management', '-7- Regulation' which is described as 'Adapted regulations by the administration to support companies in reducing food losses as required', '-8- Financing opportunities' which is described as 'Providing appropriate financial support from the administration to weaker network partners', -9- Physical characterictics' which is described as 'Adaptation of processes to consider special physical requirements of the products, including temperature, pressure sensitivity, and air composition, '-10- Shelf-life optimization' which is described as 'Process adaptations that allow the shelf life of the products to be taken into account in decision making, '-11- Network cooperation' which is described as 'Improving cooperation within networks, including information sharing and efforts to develop comprehensive measures against food losses', '-12- Mindfulness' which is described as 'Promoting awareness among employees at all levels in companies of the relevance of the problem of food losses in everyday life', '-13- Consumer satisfaction' which is described as Adaptation of internal processes with the aim of meeting specific customer requirements. Please only print out the highly relevant answers and keep the numbers inside the delimiters and return the result only as a numerical list in square brackets. And don't print out any explanation of the decisions taken, print out nothing but the list.")
+  print(resp['message'])
+  api.reset_conversation()
+  chachy2 = resp['message']
+  chachy2 = chachy2.rstrip(chachy2[-1])
+  vector1 = chachy2
+  vector1 = json.loads(vector1)
+  vector1 = np.array(vector1)
+  vector1.resize((1,13), refcheck = False)
+  vector1 = np.append(i, vector1)
+  vector_collect = np.row_stack( (vector_collect, vector1) )
+  i += 1
+
+# Important to note: The term "Prio" is misleading, since the the fields of 
+# actions that werde deemed to be relevant were not sorted by relevance. It was 
+# first planned to include prioritization, but later rejected.
+data_frame_saved = pd.DataFrame(vector_collect, columns=['Entry number', 
+'1st Prio','2nd Prio','3rd Prio','4th Prio','5th Prio','6th Prio','7th Prio',
+'8th Prio','9th Prio','10th Prio','11th Prio','12th Prio','13th Prio'])
+
+data_frame_saved.to_csv('GPTv1.csv', index=False)
+```
+
+
+**CC74** Breaking the outcome down again into SC stages
+```{r}
+Edi_col <- read_csv("PD_with_comments_all_SSA_all_SC.csv")
+GPT_outcome <- read_csv("GPTv1.csv")
+
+# The first row is the initialization row containing nothing but rows, which has 
+# to be deleted again now.
+GPT_outcome <- GPT_outcome[2:301,]
+GPT_outcome$`Entry number` <- GPT_outcome$`Entry number`+1
+
+colnames(GPT_outcome) <- c("id", "p1", "p2", "p3", "p4","p5", "p6", "p7", "p8", 
+                           "p9", "p10", "p11", "p12", "p13")
+```
+
+#```{r}
+# Replace row 45 Manually (mistake spotted later)
+GPT_outcome[45,] <- data.frame(45, 2, 3, 5, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0)
+#```
+
+**CC75** Matching the data frame outputted by ChatGPT in Python and the the data frame of data that was fed into the API
+```{r}
+combined_df <- merge(Edi_col, GPT_outcome, by = "id")
+matcher <- select(PD_copy, c("food_supply_stage", "index", "food_category", 
+                             "activity"))
+combined_df <- merge(combined_df, matcher, by = "index")
+# Quick security check that indices match with one another
+which(!(combined_df$index %in% PD_with_comments$index))
+```
+
+**CC76** Preparing subsets of data for natural language processing (NLP)
+```{r}
+# Modeled data did not have to be dropped as modelled data would usually not 
+# contain information on the cause of loss anyway due to the nature of modelled 
+# data. 
+Combi_selector <- function(f_category, sc_stage){
+x <- combined_df %>%
+  filter(food_supply_stage == sc_stage) %>% 
+  filter(food_category == f_category)
+
+xe <- str_glue('{f_category}_{sc_stage}')
+assign(xe, x, envir = globalenv())
+}
+
+# Creating subsets for all combinations for food categories and SC stages
+# Cereals
+Combi_selector("Cereals", "Harvest")
+Combi_selector("Cereals", "Processing")
+Combi_selector("Cereals", "Storage")
+Combi_selector("Cereals", "Transport")
+# Fruits
+Combi_selector("Fruits", "Harvest")
+Combi_selector("Fruits", "Processing")
+Combi_selector("Fruits", "Storage")
+Combi_selector("Fruits", "Transport")
+# O&P
+Combi_selector("O&P", "Harvest")
+Combi_selector("O&P", "Processing")
+Combi_selector("O&P", "Storage")
+Combi_selector("O&P", "Transport")
+# R&T
+Combi_selector("R&T", "Harvest")
+Combi_selector("R&T", "Processing")
+Combi_selector("R&T", "Storage")
+Combi_selector("R&T", "Transport")
+# Vegetables
+Combi_selector("Veget.", "Harvest")
+Combi_selector("Veget.", "Processing")
+Combi_selector("Veget.", "Storage")
+Combi_selector("Veget.", "Transport")
+```
+
+
+--------------------------------------------------------------------------------
+Building of a scoring model:
+--------------------------------------------------------------------------------
+
+**CC77** Cut NLP analysis results into combinations of food category and supply chain stages
+```{r}
+# Creating the sub sets of data and the respective models
+xe <- data.frame()
+wert <- data.frame()
+
+gptresults <- function(hotspot_data){
+# Dividing the whole data into sub sets
+  matcher <- select(hotspot_data, c("index"))
+  combined_df <- merge(combined_df, matcher, by = "index")
+  wert <- deparse(substitute(hotspot_data))
+  x <- combined_df
+  xe <- str_glue('GPT_{wert}')
+  assign(xe, x, envir = globalenv())
+}
+```
+
+**CC78** Compute NLP analysis reusults for all combinations of food categories and SC stages
+```{r}
+gptresults(Cereals_Harvest)
+gptresults(Cereals_Processing)
+gptresults(Cereals_Storage)
+gptresults(Cereals_Transport)
+
+gptresults(Fruits_Harvest)
+gptresults(Fruits_Processing)
+gptresults(Fruits_Storage)
+gptresults(Fruits_Transport)
+
+
+gptresults(`O&P_Harvest`)
+gptresults(`O&P_Processing`)
+gptresults(`O&P_Storage`)
+gptresults(`O&P_Transport`)
+
+gptresults(`R&T_Harvest`)
+gptresults(`R&T_Processing`)
+gptresults(`R&T_Storage`)
+gptresults(`R&T_Transport`)
+
+gptresults(Veget._Harvest)
+gptresults(Veget._Processing)
+gptresults(Veget._Storage)
+gptresults(Veget._Transport)
+```
+
+**CC79** Creating a benchmark with overall numbers of all cause of loss entries
+```{r}
+table_and_column_showerall <- function(g, occ_supply_stage){
+myvector <- data.frame()
+for(i in 1:13) {
+v <- print(sum(g[,5:17] == i))
+myvector[i,1] <- v
+}
+indexcol <- as.data.frame(c(1:13))
+myvector <- cbind(indexcol, myvector)
+myvector$percent = NA
+for(i in 1:length(myvector$`c(1:13)`)){
+myvector$percent[i] = (myvector$V1[i]/occ_supply_stage)
+}
+
+colnames(myvector) <- c("Field of action", "Occurences", 
+                        "Percentage of all occurences")
+
+myvector[1,1] <- "Transparency"
+myvector[2,1] <- "Quality management"
+myvector[3,1] <- "Packaging management"
+myvector[4,1] <- "Transport optimization"
+myvector[5,1] <- "Warehouse management"
+myvector[6,1] <- "Network structure"
+myvector[7,1] <- "Regulation"
+myvector[8,1] <- "Financing opportunities"
+myvector[9,1] <- "Physical characteristics"
+myvector[10,1] <- "Shelf-life optimization"
+myvector[11,1] <- "Network cooperation"
+myvector[12,1] <- "Mindfulness"
+myvector[13,1] <- "Consumer satisfaction"
+
+assign("myvectorall", myvector, envir = globalenv())
+}
+table_and_column_showerall(combined_df, length(combined_df[,1]))
+```
+
+**CC80** Creating a a visualization of the results of the cause of loss analysis
+```{r}
+table_and_column_shower <- function(g, occ_supply_stage){
+myvector <- data.frame()
+for(i in 1:13) {
+v <- print(sum(g[,5:17] == i))
+myvector[i,1] <- v
+}
+indexcol <- as.data.frame(c(1:13))
+myvector <- cbind(indexcol, myvector)
+myvector$percent = NA
+
+# Column and bar chart integrated
+for(i in 1:length(myvector$`c(1:13)`)){
+myvector$percent[i] = (myvector$V1[i]/occ_supply_stage)
+}
+
+colnames(myvector) <- c("Field of action", "Occurences", 
+                        "Percentage of all occurences")
+
+myvector[1,1] <- "Transparency"
+myvector[2,1] <- "Quality management"
+myvector[3,1] <- "Packaging management"
+myvector[4,1] <- "Transport optimization"
+myvector[5,1] <- "Warehouse management"
+myvector[6,1] <- "Network structure"
+myvector[7,1] <- "Regulation"
+myvector[8,1] <- "Financing opportunities"
+myvector[9,1] <- "Physical characteristics"
+myvector[10,1] <- "Shelf-life optimization"
+myvector[11,1] <- "Network cooperation"
+myvector[12,1] <- "Mindfulness"
+myvector[13,1] <- "Consumer satisfaction"
+
+myvector <- bind_cols(myvector, myvectorall)
+colnames(myvector) <- c("Field of action", "Occurences Hot Spot", 
+                        "Percentage_of_all_occurences", "Field of actionA", 
+                        "Occurences Hot SpotA", 
+                        "overall")
+myvector$`Field of action` <- factor(myvector$`Field of action`, levels = 
+    c("Consumer satisfaction", "Mindfulness", "Network cooperation", 
+      "Shelf-life optimization", "Physical characteristics", "Financing opportunities","Regulation", "Network structure",  "Warehouse management", 
+      "Transport optimization", "Packaging management", "Quality management", "Transparency"))
+assign("myvector", myvector, envir = globalenv())
+}
+
+ttob <- function(myvector){
+# Transforming the numbers from decimals to percentages
+myvector$Percentage_of_all_occurences = 
+  (myvector$Percentage_of_all_occurences)*100
+myvector$overall = (myvector$overall)*100
+g <- ggplot(myvector, aes(`Field of action`)) + 
+  geom_col(aes(y=`Percentage_of_all_occurences`), fill="steelblue") + 
+  geom_point(aes(y=overall, color="overall"), size=4, shape=124) +
+  scale_color_manual(values=c(overall="red"),
+                     labels=c(overall= "Overall benchmark")) +
+  coord_flip()+ 
+  guides(size=FALSE) + 
+  theme(legend.box="horizontal",
+        legend.key=element_blank(), legend.title=element_blank(),
+        legend.position="top") + scale_y_continuous("Relevance [%]", 
+                                                    limits = c(0,100))
+assign("g", g, envir = globalenv())
+}
+```
+
+**CC81** Checking the eligibility of combinations for the cause of loss analysis
+```{r}
+nrow(GPT_Cereals_Harvest) # eligible
+nrow(GPT_Cereals_Processing) # eligible
+nrow(GPT_Cereals_Transport) # eligible
+nrow(GPT_Cereals_Storage) # eligible
+
+nrow(GPT_Fruits_Harvest)
+nrow(GPT_Fruits_Processing) # eligible
+nrow(GPT_Fruits_Transport)
+nrow(GPT_Fruits_Storage)
+
+nrow(`GPT_O&P_Harvest`)
+nrow(`GPT_O&P_Processing`)
+nrow(`GPT_O&P_Transport`)
+nrow(`GPT_O&P_Storage`) # eligible
+
+nrow(`GPT_R&T_Harvest`)
+nrow(`GPT_R&T_Processing`) # eligible
+nrow(`GPT_R&T_Transport`)
+nrow(`GPT_R&T_Storage`) # eligible
+
+nrow(GPT_Veget._Harvest)
+nrow(GPT_Veget._Processing) # eligible
+nrow(GPT_Veget._Transport)
+nrow(GPT_Veget._Storage)
+```
+
+**CC82** Cause of loss analysis for combination of cereals-harvest
+```{r}
+table_and_column_shower(GPT_Cereals_Harvest, length(GPT_Cereals_Harvest[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_Cereals_Harvest.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(GPT_Cereals_Harvest)
+```
+
+**CC83** Cause of loss analysis for combination of cereals-processing
+```{r}
+table_and_column_shower(GPT_Cereals_Processing, 
+                        length(GPT_Cereals_Processing[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_Cereals_Processing.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+```
+
+**CC84** Cause of loss analysis for combination of cereals-storage
+```{r}
+table_and_column_shower(GPT_Cereals_Storage, length(GPT_Cereals_Storage[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_Cereals_Storage.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(GPT_Cereals_Storage)
+```
+
+**CC85** Cause of loss analysis for combination of cereals-transport
+```{r}
+table_and_column_shower(GPT_Cereals_Transport, 
+                        length(GPT_Cereals_Transport[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_Cereals_Transport.png", quality = 100, width = 15, height = 8.5,
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(GPT_Cereals_Transport)
+```
+
+**CC86** Cause of loss analysis for combination of fruits-processing
+```{r}
+table_and_column_shower(GPT_Fruits_Processing, 
+                        length(GPT_Fruits_Processing[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_Fruits_Processing.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(GPT_Fruits_Processing)
+```
+
+**CC87** Cause of loss analysis for combination of O&P-storage
+```{r}
+table_and_column_shower(`GPT_O&P_Storage`, length(`GPT_O&P_Storage`[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_O&P_Storage.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300)
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(`GPT_O&P_Storage`)
+```
+
+**CC88** Cause of loss analysis for combination of R&T-processing
+```{r}
+table_and_column_shower(`GPT_R&T_Processing`, length(`GPT_R&T_Processing`[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_R&T_Processing.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(`GPT_R&T_Processing`)
+```
+
+**CC89** Cause of loss analysis for combination of R&T-storage
+```{r}
+table_and_column_shower(`GPT_R&T_Storage`, length(`GPT_R&T_Storage`[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_R&T_Storage.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300) 
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(`GPT_R&T_Storage`)
+```
+
+**CC90** Cause of loss analysis for combination of Veget.-processing
+```{r}
+table_and_column_shower(GPT_Veget._Processing, 
+                        length(GPT_Veget._Processing[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_Veget._Processing.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300)  
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(GPT_Veget._Processing)
+```
+
+**CC91** Template for visualization of NLP analysis' results
+```{r}
+table_and_column_shower(GPT_Veget._Storage, 
+                        length(GPT_Veget._Storage[,1]))
+ttob(myvector)
+g
+jpeg("GPTF_NLP_result_template.png", quality = 100, width = 15, height = 8.5, 
+     units = "cm", res = 300)  
+ready_conversion(g)
+dev.off()
+
+# Calculation the n (numbers of data points) in the sub data set. 
+# They all contain data in the cause of loss column.
+nrow(GPT_Veget._Storage)
+```
+
+
+**CC92** Comparing overall LPI scores in SSA with overall LPI scores word-wide
+```{r}
+# Box plot of SSA only
+boxplot(PD$infrastructure, ylab ="Infrastructure performance", ylim = c(2,4.2))
+
+# Now compared to the whole world:
+boxplot(LPI_Agg_12_18$`Infrastructure...7`, ylab ="Infrastructure performance", ylim = c(2,4.2))
+```
